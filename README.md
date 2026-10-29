@@ -1,5 +1,7 @@
 # 🇧🇷 Comparador de Votação (1ºT vs 2ºT) - Eleição Presidencial 2026
 
+> 🌐 **Deploy no Render (Acesso Online):** [https://eleicao-2026-1uhq.onrender.com](https://eleicao-2026-1uhq.onrender.com)
+
 Sistema eleitoral de alta performance que cruza os dados oficiais consolidados de cada seção eleitoral do país (urna a urna) do 1º Turno com o 2º Turno (Lula 13 vs Flávio Bolsonaro 22), com **detalhamento completo por Municípios, Bairros e Colégios Eleitorais**.
 
 ## 🚀 Funcionalidades
@@ -18,6 +20,10 @@ Sistema eleitoral de alta performance que cruza os dados oficiais consolidados d
 - **Detalhamento Intra-Urbano Oficial:** Distribuição territorial dos votos por bairro (ex: Vila Mariana, Copacabana, Tijuca, Moema, etc.).
 - **Filtros e Ordenação:** Bairros mais lulistas, mais bolsonaristas, ou com maiores viradas.
 - **Mapeamento de Colégios Eleitorais:** Placar acumulado nos maiores estabelecimentos de ensino de cada cidade.
+
+## 🌐 Acesso Online em Produção
+Acesse a aplicação no ar pelo Render:
+👉 **[https://eleicao-2026-1uhq.onrender.com](https://eleicao-2026-1uhq.onrender.com)**
 
 ## 🛠️ Como Executar Localmente
 1. Dê um duplo clique no arquivo `iniciar_apuracao.bat` ou execute:
