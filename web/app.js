@@ -677,8 +677,10 @@ const mapInstances = {
     layerGroupVoronoi: null,
     layerGroupBubbles: null,
     layerGroupSchools: null,
+    hoverTooltip: null,
+    hoveringSchool: false,
     mode: '2t',
-    layers: { voronoi: true, bubbles: true, schools: false },
+    layers: { voronoi: true, bubbles: true, schools: true },
     payload: null,
     bairrosIndex: {}
   },
@@ -689,6 +691,8 @@ const mapInstances = {
     layerGroupVoronoi: null,
     layerGroupBubbles: null,
     layerGroupSchools: null,
+    hoverTooltip: null,
+    hoveringSchool: false,
     mode: '2t',
     layers: { voronoi: true, bubbles: true, schools: true },
     payload: null,
@@ -707,32 +711,36 @@ function ensureLeafletMap(targetKey) {
     inst.map = L.map(el, {
       center: [-23.5505, -46.6333],
       zoom: 11,
-      zoomControl: true,
-      preferCanvas: true
+      zoomControl: true
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO • Dados Oficiais TSE',
-      subdomains: 'abcd',
+    // Cria panes e renderizadores SVG separados para garantir que 100% das bolinhas das escolas fiquem acima dos bairros
+    inst.map.createPane('bairroPane');
+    inst.map.getPane('bairroPane').style.zIndex = 410;
+    inst.bairroRenderer = L.svg({ pane: 'bairroPane', padding: 0.5 });
+
+    inst.map.createPane('escolaPane');
+    inst.map.getPane('escolaPane').style.zIndex = 450;
+    inst.escolaRenderer = L.svg({ pane: 'escolaPane', padding: 0.5 });
+
+    // Garante que o quadro de informações (tooltip/popup) fique sempre acima das bolinhas
+    inst.map.getPane('tooltipPane').style.zIndex = 900;
+    inst.map.getPane('popupPane').style.zIndex = 910;
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap • Dados Oficiais TSE',
       maxZoom: 19
     }).addTo(inst.map);
 
     inst.layerGroupVoronoi = L.layerGroup().addTo(inst.map);
     inst.layerGroupBubbles = L.layerGroup().addTo(inst.map);
-    inst.layerGroupSchools = L.layerGroup();
-    if (inst.layers.schools) {
-      inst.layerGroupSchools.addTo(inst.map);
-    }
+    inst.layerGroupSchools = L.layerGroup().addTo(inst.map);
 
-    // Auto-exibir escolas quando o usuário der bastante zoom no mapa inline
-    inst.map.on('zoomend', () => {
-      const z = inst.map.getZoom();
-      if (targetKey === 'inline' && z >= 14 && !inst.layers.schools) {
-        inst.layers.schools = true;
-        const btn = document.getElementById('inline-layer-schools');
-        if (btn) btn.classList.add('active');
-        inst.layerGroupSchools.addTo(inst.map);
-      }
+    inst.hoverTooltip = L.tooltip({
+      className: 'bairro-map-tooltip',
+      direction: 'top',
+      offset: [0, -10],
+      opacity: 0.98
     });
   }
   return inst;
@@ -844,31 +852,30 @@ function createCirclePolygon(centerLng, centerLat, radiusDeg) {
   return pts;
 }
 
-function buildBairroPopupHTML(b, targetKey) {
-  const signDeltaL = (b.delta_lula || 0) >= 0 ? '+' : '';
+function buildBairroPopupHTML(b) {
   const signSwing = (b.swing_lula || 0) >= 0 ? '+' : '';
-  let viradaHtml = `<span class="badge-status badge-manteve">Manteve (${b.vencedor_2t})</span>`;
+  let viradaHtml = `<span class="badge-status badge-manteve">Vencedor no Bairro: ${b.vencedor_2t}</span>`;
   if (b.virada === 'Flávio -> Lula') {
-    viradaHtml = `<span class="badge-status badge-virada-lula">🔄 VIRADA NO BAIRRO: FLÁVIO ➔ LULA</span>`;
+    viradaHtml = `<span class="badge-status badge-virada-lula">🔄 BAIRRO VIROU: FLÁVIO ➔ LULA</span>`;
   } else if (b.virada === 'Lula -> Flávio') {
-    viradaHtml = `<span class="badge-status badge-virada-flavio">🔄 VIRADA NO BAIRRO: LULA ➔ FLÁVIO</span>`;
+    viradaHtml = `<span class="badge-status badge-virada-flavio">🔄 BAIRRO VIROU: LULA ➔ FLÁVIO</span>`;
   }
 
   return `
-    <div style="min-width: 250px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 8px;">
-        <strong style="font-size: 14px; color: #f8fafc;">🏘️ ${b.bairro}</strong>
-        <span style="font-size: 11px; color: #38bdf8; font-weight: 700;">${formatNumber(b.total_secoes)} seções</span>
+    <div style="min-width: 265px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 6px; margin-bottom: 8px;">
+        <strong style="font-size: 14px; color: #f8fafc;">🏘️ BAIRRO: ${b.bairro}</strong>
+        <span style="font-size: 11px; color: #38bdf8; font-weight: 700;">${formatNumber(b.total_secoes)} urnas</span>
       </div>
       <div style="margin-bottom: 8px;">${viradaHtml}</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; background: rgba(0,0,0,0.35); padding: 8px; border-radius: 8px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; background: rgba(0,0,0,0.45); padding: 8px; border-radius: 8px;">
         <div>
-          <div style="color: #fca5a5; font-weight: 700;">13 - LULA</div>
+          <div style="color: #fca5a5; font-weight: 800;">13 - LULA</div>
           <div>2ºT: <strong>${formatPct(b.pct_lula_2t)}</strong> (${formatNumber(b.lula_2t)})</div>
           <div style="color: #94a3b8; font-size: 11px;">1ºT: ${formatPct(b.pct_lula_1t)} (${formatNumber(b.lula_1t)})</div>
         </div>
         <div>
-          <div style="color: #93c5fd; font-weight: 700;">22 - FLÁVIO</div>
+          <div style="color: #93c5fd; font-weight: 800;">22 - FLÁVIO</div>
           <div>2ºT: <strong>${formatPct(b.pct_flavio_2t)}</strong> (${formatNumber(b.flavio_2t)})</div>
           <div style="color: #94a3b8; font-size: 11px;">1ºT: ${formatPct(b.pct_flavio_1t)} (${formatNumber(b.flavio_1t)})</div>
         </div>
@@ -876,6 +883,49 @@ function buildBairroPopupHTML(b, targetKey) {
       <div style="margin-top: 8px; display: flex; justify-content: space-between; font-size: 11px; color: #cbd5e1;">
         <span>Urnas viradas p/ Lula: <strong style="color: #fbbf24;">${formatNumber(b.viradas_lula || 0)}</strong></span>
         <span>Swing: <strong style="color: ${(b.swing_lula || 0) >= 0 ? '#4ade80' : '#f87171'};">${signSwing}${b.swing_lula}%</strong></span>
+      </div>
+    </div>
+  `;
+}
+
+function buildEscolaPopupHTML(loc) {
+  const signDeltaL = (loc.delta_lula || 0) >= 0 ? '+' : '';
+  const signDeltaF = (loc.delta_flavio || 0) >= 0 ? '+' : '';
+  let statusHtml = `<span class="badge-status badge-manteve">Vencedor na Escola: ${loc.vencedor_2t}</span>`;
+  if (loc.virada_local === 'Flávio -> Lula') {
+    statusHtml = `<span class="badge-status badge-virada-lula">🔄 ESCOLA VIROU: FLÁVIO ➔ LULA</span>`;
+  } else if (loc.virada_local === 'Lula -> Flávio') {
+    statusHtml = `<span class="badge-status badge-virada-flavio">🔄 ESCOLA VIROU: LULA ➔ FLÁVIO</span>`;
+  }
+
+  return `
+    <div style="min-width: 280px;">
+      <div style="border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 6px; margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+          <strong style="font-size: 13px; color: #38bdf8;">🏫 ${loc.local}</strong>
+          <span style="font-size: 11px; background: rgba(56,189,248,0.15); color: #7dd3fc; padding: 2px 6px; border-radius: 4px; font-weight: 700; white-space: nowrap;">${loc.secoes} urnas</span>
+        </div>
+        <div style="font-size: 11px; color: #cbd5e1; margin-top: 3px;">
+          Bairro: <strong>${loc.bairro}</strong> ${loc.endereco ? '• ' + loc.endereco : ''}
+        </div>
+      </div>
+      <div style="margin-bottom: 8px;">${statusHtml}</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; background: rgba(0,0,0,0.45); padding: 8px; border-radius: 8px;">
+        <div>
+          <div style="color: #fca5a5; font-weight: 800;">13 - LULA</div>
+          <div>2ºT: <strong>${formatPct(loc.pct_lula_2t)}</strong> (${formatNumber(loc.lula_2t)})</div>
+          <div style="color: #94a3b8; font-size: 11px;">1ºT: ${formatPct(loc.pct_lula_1t)} (${formatNumber(loc.lula_1t)})</div>
+          <div style="color: #4ade80; font-size: 11px; font-weight: 700;">Delta: ${signDeltaL}${formatNumber(loc.delta_lula || 0)}</div>
+        </div>
+        <div>
+          <div style="color: #93c5fd; font-weight: 800;">22 - FLÁVIO</div>
+          <div>2ºT: <strong>${formatPct(loc.pct_flavio_2t)}</strong> (${formatNumber(loc.flavio_2t)})</div>
+          <div style="color: #94a3b8; font-size: 11px;">1ºT: ${formatPct(loc.pct_flavio_1t)} (${formatNumber(loc.flavio_1t)})</div>
+          <div style="color: #93c5fd; font-size: 11px; font-weight: 700;">Delta: ${signDeltaF}${formatNumber(loc.delta_flavio || 0)}</div>
+        </div>
+      </div>
+      <div style="margin-top: 8px; display: flex; justify-content: space-between; font-size: 11px; color: #fbbf24; font-weight: 700;">
+        <span>${(loc.viradas_lula || 0) > 0 ? `🔄 ${loc.viradas_lula} urna(s) viraram p/ Lula nesta escola` : 'Nenhuma urna virou nesta escola'}</span>
       </div>
     </div>
   `;
@@ -890,12 +940,12 @@ function renderMapLegend(targetKey) {
     el.innerHTML = `
       <div class="legend-group">
         <span style="font-weight: 800; color: #f8fafc;">LEGENDA (MAPA DE VIRADAS 1ºT ➔ 2ºT):</span>
-        <span class="legend-item"><i class="legend-swatch" style="background: #f59e0b;"></i> Bairro Virou Flávio ➔ Lula</span>
-        <span class="legend-item"><i class="legend-swatch" style="background: #ea580c;"></i> Possui Urnas/Escolas Viradas p/ Lula</span>
-        <span class="legend-item"><i class="legend-swatch" style="background: #06b6d4;"></i> Bairro Virou Lula ➔ Flávio</span>
-        <span class="legend-item"><i class="legend-swatch" style="background: #1e293b;"></i> Sem Virada de Urnas</span>
+        <span class="legend-item"><i class="legend-swatch" style="background: #f59e0b;"></i> Virou Flávio ➔ Lula</span>
+        <span class="legend-item"><i class="legend-swatch" style="background: #ea580c;"></i> Possui Urnas Viradas p/ Lula</span>
+        <span class="legend-item"><i class="legend-swatch" style="background: #06b6d4;"></i> Virou Lula ➔ Flávio</span>
+        <span class="legend-item"><i class="legend-swatch" style="background: #1e293b;"></i> Sem Virada</span>
       </div>
-      <div style="font-size: 11px;">💡 Clique em um bairro ou escola para inspecionar</div>
+      <div style="font-size: 11px;">🖱️ Passe o mouse no <strong>Bairro</strong> (dados do bairro) ou na <strong>Bolinha</strong> (dados da escola)</div>
     `;
     return;
   }
@@ -903,13 +953,13 @@ function renderMapLegend(targetKey) {
   const labelTurno = inst.mode === '1t' ? '1º TURNO' : '2º TURNO';
   el.innerHTML = `
     <div class="legend-group">
-      <span style="font-weight: 800; color: #f8fafc;">LEGENDA (${labelTurno}):</span>
+      <span style="font-weight: 800; color: #f8fafc;">VENCEDOR (${labelTurno}):</span>
       <span class="legend-item"><i class="legend-swatch" style="background: #b91c1c;"></i> Lula Forte (>60%)</span>
       <span class="legend-item"><i class="legend-swatch" style="background: #ef4444;"></i> Lula Venceu (50–60%)</span>
       <span class="legend-item"><i class="legend-swatch" style="background: #3b82f6;"></i> Flávio Venceu (50–60%)</span>
       <span class="legend-item"><i class="legend-swatch" style="background: #1d4ed8;"></i> Flávio Forte (>60%)</span>
     </div>
-    <div style="font-size: 11px;">⭕ Tamanho da bolha = Total de Seções do Bairro • 🏫 Pinos = Escolas</div>
+    <div style="font-size: 11px;">🗺️ Fundo Pintado = Vencedor no Bairro • 🔵🔴 Bolinhas = Escolas (passe o mouse)</div>
   `;
 }
 
@@ -918,6 +968,10 @@ function renderElectoralMap(targetKey, payload, preserveView) {
   if (!inst || !payload) return;
 
   inst.payload = payload;
+  inst.hoveringSchool = false;
+  if (inst.hoverTooltip && inst.map.hasLayer(inst.hoverTooltip)) {
+    inst.map.removeLayer(inst.hoverTooltip);
+  }
   inst.layerGroupVoronoi.clearLayers();
   inst.layerGroupBubbles.clearLayers();
   inst.layerGroupSchools.clearLayers();
@@ -942,13 +996,12 @@ function renderElectoralMap(targetKey, payload, preserveView) {
   const seenCoords = new Set();
   const validBairros = [];
 
-  rawBairros.forEach((b, idx) => {
+  rawBairros.forEach(b => {
     let lat = Number(b.lat);
     let lng = Number(b.lng);
     if (Math.abs(lat - medLat) > 0.55 || Math.abs(lng - medLng) > 0.55) {
       return;
     }
-    // Desempata coordenadas idênticas com micro-offset espiral (~60m) para malha de Voronoi perfeita
     let key = `${lat.toFixed(5)}_${lng.toFixed(5)}`;
     let attempt = 1;
     while (seenCoords.has(key)) {
@@ -968,13 +1021,11 @@ function renderElectoralMap(targetKey, payload, preserveView) {
   if (validBairros.length === 0) return;
 
   let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-  let maxSecoes = 1;
   validBairros.forEach(b => {
     if (b.latClean < minLat) minLat = b.latClean;
     if (b.latClean > maxLat) maxLat = b.latClean;
     if (b.lngClean < minLng) minLng = b.lngClean;
     if (b.lngClean > maxLng) maxLng = b.lngClean;
-    if (b.total_secoes > maxSecoes) maxSecoes = b.total_secoes;
   });
 
   const spanLat = Math.max(0.015, maxLat - minLat);
@@ -982,10 +1033,44 @@ function renderElectoralMap(targetKey, payload, preserveView) {
   const maxSpan = Math.max(spanLat, spanLng);
   const pad = Math.max(0.02, maxSpan * 0.25);
 
-  // Raio máximo orgânico de cada território de bairro (evita polígonos infinitos nas bordas)
-  const cellRadiusDeg = Math.max(0.010, Math.min(0.048, (maxSpan / Math.sqrt(validBairros.length)) * 1.35));
+  const cellRadiusDeg = Math.max(0.012, Math.min(0.052, (maxSpan / Math.sqrt(validBairros.length)) * 1.45));
 
-  // 1. Camada de Polígonos de Território por Bairro (Voronoi recortado)
+  function bindBairroPolygonEvents(poly, b, st) {
+    poly.on('mouseover', function (e) {
+      if (inst.hoveringSchool) return;
+      this.setStyle({ weight: 2.5, fillOpacity: Math.min(0.72, st.fillOpacity + 0.18) });
+      inst.hoverTooltip
+        .setContent(buildBairroPopupHTML(b))
+        .setLatLng(e.latlng)
+        .addTo(inst.map);
+    });
+
+    poly.on('mousemove', function (e) {
+      if (inst.hoveringSchool) return;
+      inst.hoverTooltip
+        .setContent(buildBairroPopupHTML(b))
+        .setLatLng(e.latlng);
+      if (!inst.map.hasLayer(inst.hoverTooltip)) {
+        inst.hoverTooltip.addTo(inst.map);
+      }
+    });
+
+    poly.on('mouseout', function () {
+      this.setStyle({
+        weight: b.virada !== 'Não' && inst.mode === 'viradas' ? 2.2 : 1.2,
+        fillOpacity: st.fillOpacity
+      });
+      if (!inst.hoveringSchool && inst.map.hasLayer(inst.hoverTooltip)) {
+        inst.map.removeLayer(inst.hoverTooltip);
+      }
+    });
+
+    poly.on('click', () => {
+      aoClicarBairroNoMapa(targetKey, b);
+    });
+  }
+
+  // 1. Camada de Polígonos Pintados por Bairro (Voronoi recortado na pane inferior 'bairroPane')
   if (validBairros.length >= 3 && window.d3 && d3.Delaunay) {
     const delaunay = d3.Delaunay.from(validBairros, b => b.lngClean, b => b.latClean);
     const voronoi = delaunay.voronoi([minLng - pad, minLat - pad, maxLng + pad, maxLat + pad]);
@@ -1000,87 +1085,89 @@ function renderElectoralMap(targetKey, payload, preserveView) {
       const st = getBairroStyle(b, inst.mode);
 
       const poly = L.polygon(latLngs, {
+        pane: 'bairroPane',
+        renderer: inst.bairroRenderer,
         color: st.stroke,
         weight: b.virada !== 'Não' && inst.mode === 'viradas' ? 2.2 : 1.2,
-        opacity: 0.75,
+        opacity: 0.78,
         fillColor: st.fill,
         fillOpacity: st.fillOpacity
       });
 
-      poly.bindTooltip(
-        `<strong>${b.bairro}</strong><br>` +
-        `2ºT: <span style="color:#fca5a5;">Lula ${formatPct(b.pct_lula_2t)}</span> vs <span style="color:#93c5fd;">Flávio ${formatPct(b.pct_flavio_2t)}</span><br>` +
-        `1ºT: Lula ${formatPct(b.pct_lula_1t)} vs Flávio ${formatPct(b.pct_flavio_1t)} • ${b.total_secoes} seções`,
-        { sticky: true, className: 'bairro-map-tooltip' }
-      );
-
-      poly.on('mouseover', function () {
-        this.setStyle({ weight: 2.5, fillOpacity: Math.min(0.75, st.fillOpacity + 0.2) });
-      });
-      poly.on('mouseout', function () {
-        this.setStyle({ weight: b.virada !== 'Não' && inst.mode === 'viradas' ? 2.2 : 1.2, fillOpacity: st.fillOpacity });
-      });
-      poly.on('click', () => {
-        aoClicarBairroNoMapa(targetKey, b);
-      });
-
+      bindBairroPolygonEvents(poly, b, st);
       inst.layerGroupVoronoi.addLayer(poly);
     });
   } else {
-    // Cidades com 1 ou 2 bairros
     validBairros.forEach(b => {
       const latLngs = createCirclePolygon(b.lngClean, b.latClean, cellRadiusDeg);
       const st = getBairroStyle(b, inst.mode);
       const poly = L.polygon(latLngs, {
+        pane: 'bairroPane',
+        renderer: inst.bairroRenderer,
         color: st.stroke,
         weight: 1.5,
         opacity: 0.8,
         fillColor: st.fill,
         fillOpacity: st.fillOpacity
       });
-      poly.on('click', () => aoClicarBairroNoMapa(targetKey, b));
+      bindBairroPolygonEvents(poly, b, st);
       inst.layerGroupVoronoi.addLayer(poly);
     });
   }
 
-  // 2. Camada de Bolhas Proporcionais por Bairro + Rótulos dos Maiores Bairros
-  validBairros.forEach((b, idx) => {
-    const st = getBairroStyle(b, inst.mode);
-    const radiusPx = Math.max(5, Math.min(24, 4 + Math.sqrt(b.total_secoes / maxSecoes) * 18));
-
-    const bubble = L.circleMarker([b.latClean, b.lngClean], {
-      radius: radiusPx,
-      color: '#ffffff',
-      weight: b.virada !== 'Não' ? 2 : 1,
-      fillColor: st.fill,
-      fillOpacity: 0.88
+  // 2. Camada de Rótulos dos Principais Bairros (para orientar leitura no mapa)
+  validBairros.slice(0, 18).forEach(b => {
+    const labelAnchor = L.circleMarker([b.latClean, b.lngClean], {
+      pane: 'bairroPane',
+      renderer: inst.bairroRenderer,
+      radius: 1,
+      opacity: 0,
+      fillOpacity: 0,
+      interactive: false
     });
-
-    bubble.bindPopup(buildBairroPopupHTML(b, targetKey));
-    bubble.on('click', () => {
-      aoClicarBairroNoMapa(targetKey, b);
+    labelAnchor.bindTooltip(b.bairro, {
+      permanent: true,
+      direction: 'center',
+      className: 'bairro-label-permanent'
     });
-
-    // Rótulo fixo discreto nos 15 maiores bairros da cidade
-    if (idx < 15) {
-      bubble.bindTooltip(b.bairro, {
-        permanent: true,
-        direction: 'top',
-        offset: [0, -radiusPx - 2],
-        className: 'bairro-label-permanent'
-      });
-    }
-
-    inst.layerGroupBubbles.addLayer(bubble);
+    inst.layerGroupBubbles.addLayer(labelAnchor);
   });
 
-  // 3. Camada de Pinos das Escolas / Colégios Eleitorais
-  const locais = (payload.locais || []).filter(
-    l => l.lat !== null && l.lng !== null && !isNaN(l.lat) && !isNaN(l.lng) &&
-         Math.abs(Number(l.lat) - medLat) <= 0.55 && Math.abs(Number(l.lng) - medLng) <= 0.55
-  );
+  // 3. Camada de Bolinhas de TODAS as Escolas / Colégios Eleitorais (na pane superior 'escolaPane' com renderer próprio)
+  const todosLocais = payload.locais || [];
+  const seenSchoolCoords = new Set();
 
-  locais.forEach(loc => {
+  todosLocais.forEach(loc => {
+    let lat = Number(loc.lat);
+    let lng = Number(loc.lng);
+    const coordInvalida =
+      loc.lat === null || loc.lng === null || isNaN(lat) || isNaN(lng) ||
+      Math.abs(lat - medLat) > 0.55 || Math.abs(lng - medLng) > 0.55;
+
+    if (coordInvalida) {
+      const bFallback = inst.bairrosIndex[loc.bairro];
+      if (bFallback) {
+        lat = bFallback.latClean;
+        lng = bFallback.lngClean;
+      } else {
+        lat = medLat;
+        lng = medLng;
+      }
+    }
+
+    let skey = `${lat.toFixed(5)}_${lng.toFixed(5)}`;
+    let sAttempt = 1;
+    // Se duas escolas dividem o mesmo endereço ou fallback de bairro, separa em espiral (~25m) para todas ficarem clicáveis
+    while (seenSchoolCoords.has(skey)) {
+      const angle = sAttempt * 2.39996;
+      const r = 0.00025 * Math.sqrt(sAttempt);
+      lat += r * Math.sin(angle);
+      lng += r * Math.cos(angle);
+      skey = `${lat.toFixed(5)}_${lng.toFixed(5)}`;
+      sAttempt++;
+    }
+    seenSchoolCoords.add(skey);
+
     let fillSchool = loc.vencedor_2t === 'Lula' ? '#ef4444' : '#3b82f6';
     if (inst.mode === '1t') {
       fillSchool = loc.vencedor_1t === 'Lula' ? '#ef4444' : '#3b82f6';
@@ -1094,33 +1181,61 @@ function renderElectoralMap(targetKey, payload, preserveView) {
       }
     }
 
-    const schoolMarker = L.circleMarker([Number(loc.lat), Number(loc.lng)], {
-      radius: Math.max(4, Math.min(9, 3 + Math.sqrt(loc.secoes || 1))),
-      color: '#0f172a',
-      weight: 1.5,
+    const baseRadius = Math.max(5.5, Math.min(11, 4 + Math.sqrt(loc.secoes || 1) * 1.1));
+
+    const schoolMarker = L.circleMarker([lat, lng], {
+      pane: 'escolaPane',
+      renderer: inst.escolaRenderer,
+      radius: baseRadius,
+      color: '#ffffff',
+      weight: 1.6,
       fillColor: fillSchool,
-      fillOpacity: 0.95
+      fillOpacity: 0.96,
+       bubblingMouseEvents: false
     });
 
-    schoolMarker.bindPopup(`
-      <div style="min-width: 230px;">
-        <div style="font-size: 13px; font-weight: 800; color: #38bdf8; margin-bottom: 2px;">🏫 ${loc.local}</div>
-        <div style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">Bairro: <strong>${loc.bairro}</strong> • ${loc.secoes} urnas<br>${loc.endereco || ''}</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; background: rgba(0,0,0,0.4); padding: 7px; border-radius: 6px;">
-          <div>
-            <span style="color:#fca5a5; font-weight:700;">Lula 2ºT:</span><br>
-            <strong>${formatPct(loc.pct_lula_2t)}</strong> (${formatNumber(loc.lula_2t)})
-          </div>
-          <div>
-            <span style="color:#93c5fd; font-weight:700;">Flávio 2ºT:</span><br>
-            <strong>${formatPct(loc.pct_flavio_2t)}</strong> (${formatNumber(loc.flavio_2t)})
-          </div>
-        </div>
-        <div style="margin-top: 6px; font-size: 11px; color: #fbbf24; font-weight: 700;">
-          ${loc.viradas > 0 ? `🔄 ${loc.viradas} seção(ões) viraram nesta escola` : 'Manteve tendência nas urnas'}
-        </div>
-      </div>
-    `);
+    schoolMarker.on('mouseover', function (e) {
+      inst.hoveringSchool = true;
+      if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
+      this.setStyle({
+        radius: baseRadius + 3.5,
+        weight: 2.5,
+        color: '#fef08a',
+        fillOpacity: 1.0
+      });
+      inst.hoverTooltip
+        .setContent(buildEscolaPopupHTML(loc))
+        .setLatLng([lat, lng])
+        .addTo(inst.map);
+    });
+
+    schoolMarker.on('mousemove', function (e) {
+      inst.hoveringSchool = true;
+      if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
+      inst.hoverTooltip
+        .setContent(buildEscolaPopupHTML(loc))
+        .setLatLng([lat, lng]);
+    });
+
+    schoolMarker.on('mouseout', function () {
+      inst.hoveringSchool = false;
+      this.setStyle({
+        radius: baseRadius,
+        weight: 1.5,
+        color: '#ffffff',
+        fillOpacity: 0.95
+      });
+      if (inst.map.hasLayer(inst.hoverTooltip)) {
+        inst.map.removeLayer(inst.hoverTooltip);
+      }
+    });
+
+    schoolMarker.on('click', function (e) {
+      if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
+      if (inst.bairrosIndex[loc.bairro]) {
+        aoClicarBairroNoMapa(targetKey, inst.bairrosIndex[loc.bairro]);
+      }
+    });
 
     inst.layerGroupSchools.addLayer(schoolMarker);
   });

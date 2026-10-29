@@ -204,6 +204,11 @@ class CustomHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=WEB_DIR, **kwargs)
 
+    def end_headers(self):
+        # Evita que o navegador use versões antigas de app.js/style.css em cache
+        self.send_header("Cache-Control", "no-store, must-revalidate")
+        super().end_headers()
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
@@ -422,7 +427,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
                        virada_bairro, viradas_secoes_lula, viradas_secoes_flavio, lat, lng
                 FROM resumo_bairros
                 WHERE uf = ? AND cod_municipio = ?
-                ORDER BY total_secoes DESC LIMIT 1000
+                ORDER BY total_secoes DESC LIMIT 10000
             """, (r[0], r[1]))
             bairros = []
             for b in c.fetchall():
@@ -434,7 +439,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
                     "viradas_lula": b[16], "viradas_flavio": b[17], "lat": b[18], "lng": b[19]
                 })
 
-            # Escolas/Locais de Votação (com coordenadas geográficas da tabela consolidada resumo_locais)
+            # Todas as Escolas/Locais de Votação do município (sem corte)
             c.execute("""
                 SELECT nm_local, nm_bairro, ds_endereco, total_secoes,
                        lula_1t, flavio_1t, pct_lula_1t, pct_flavio_1t, vencedor_1t,
@@ -443,7 +448,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
                        viradas_secoes_lula, viradas_secoes_flavio, lat, lng
                 FROM resumo_locais
                 WHERE uf = ? AND cod_municipio = ?
-                ORDER BY total_secoes DESC LIMIT 1500
+                ORDER BY total_secoes DESC LIMIT 10000
             """, (r[0], r[1]))
             locais = []
             for loc in c.fetchall():
@@ -475,7 +480,7 @@ class CustomHandler(SimpleHTTPRequestHandler):
             cod_mun = query.get("cod_mun", [""])[0]
             nome_mun = query.get("municipio", [""])[0].upper().strip()
             sort = query.get("sort", ["secoes"])[0]
-            limit = min(int(query.get("limit", ["300"])[0]), 1000)
+            limit = min(int(query.get("limit", ["2000"])[0]), 10000)
 
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()

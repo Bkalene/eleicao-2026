@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261027b">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6"></script>
 </head>
@@ -533,9 +533,9 @@
             </div>
 
             <div class="mode-selector">
-              <button class="mode-btn active" id="inline-layer-voronoi" onclick="toggleMapLayer('inline', 'voronoi')">🗺️ Territórios</button>
-              <button class="mode-btn active" id="inline-layer-bubbles" onclick="toggleMapLayer('inline', 'bubbles')">⭕ Bolhas</button>
-              <button class="mode-btn" id="inline-layer-schools" onclick="toggleMapLayer('inline', 'schools')">🏫 Escolas</button>
+              <button class="mode-btn active" id="inline-layer-voronoi" onclick="toggleMapLayer('inline', 'voronoi')">🗺️ Pintura dos Bairros</button>
+              <button class="mode-btn active" id="inline-layer-schools" onclick="toggleMapLayer('inline', 'schools')">🏫 Bolinhas das Escolas</button>
+              <button class="mode-btn active" id="inline-layer-bubbles" onclick="toggleMapLayer('inline', 'bubbles')">🏷️ Nomes dos Bairros</button>
             </div>
           </div>
         </div>
@@ -711,9 +711,9 @@
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <span style="font-size: 12px; font-weight: 700; color: var(--text-muted);">CAMADAS VISUAIS:</span>
             <div class="mode-selector">
-              <button class="mode-btn active" id="full-layer-voronoi" onclick="toggleMapLayer('full', 'voronoi')">🗺️ Polígonos de Bairro</button>
-              <button class="mode-btn active" id="full-layer-bubbles" onclick="toggleMapLayer('full', 'bubbles')">⭕ Bolhas de Votos</button>
-              <button class="mode-btn active" id="full-layer-schools" onclick="toggleMapLayer('full', 'schools')">🏫 Pinos das Escolas</button>
+              <button class="mode-btn active" id="full-layer-voronoi" onclick="toggleMapLayer('full', 'voronoi')">🗺️ Pintura dos Bairros</button>
+              <button class="mode-btn active" id="full-layer-schools" onclick="toggleMapLayer('full', 'schools')">🏫 Bolinhas das Escolas</button>
+              <button class="mode-btn active" id="full-layer-bubbles" onclick="toggleMapLayer('full', 'bubbles')">🏷️ Nomes dos Bairros</button>
             </div>
           </div>
         </div>
@@ -739,6 +739,6 @@
 
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20261027b"></script>
 </body>
 </html>
